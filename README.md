@@ -1,4 +1,4 @@
-# 💰 MLBF Financial System (Sistema de Gestión de Préstamos)
+# 💰 Financial System loans (Sistema de Gestión de Préstamos)
 
 Este repositorio contiene el código fuente completo del Sistema de Gestión y Administración de Préstamos (LMS) para el control interno de operaciones financieras.
 
