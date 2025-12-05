@@ -1,0 +1,125 @@
+// Configuración del conector y de la Base de Datos
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ----------------------------------------------------
+// 1. USUARIOS (Administradores)
+// Para el sistema de autenticación MLBF (Melvin & Brayan)
+// ----------------------------------------------------
+model User {
+  id    String @id @default(uuid()) // Identificador único del Admin
+  email String @unique
+  name  String?
+  // Campos de seguridad
+  password String
+  role     Role     @default(ADMIN) // Asumimos que todos son ADMIN inicialmente
+
+  // Relaciones de Auditoría (quién creó/actualizó qué)
+  loansCreated Loan[] @relation("CreatedLoans")
+  loansUpdated Loan[] @relation("UpdatedLoans")
+  paymentsCreated Payment[] @relation("CreatedPayments")
+  // ...otros modelos que quieras auditar
+
+  // Auditoría: Registro de todas las acciones del usuario
+  auditLogs AuditLog[]
+}
+
+enum Role {
+  ADMIN
+  SUPERVISOR
+}
+
+// ----------------------------------------------------
+// 2. CLIENTES (Prestatarios)
+// ----------------------------------------------------
+model Client {
+  id           String @id @default(uuid())
+  nombre_completo String
+  direccion    String?
+  telefono     String
+  email        String?
+  
+  // Relación: Un cliente puede tener muchos préstamos
+  loans Loan[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ----------------------------------------------------
+// 3. PRÉSTAMOS (Loans)
+// ----------------------------------------------------
+model Loan {
+  id                   String   @id @default(uuid())
+  clientId             String   // Clave Foránea al Cliente
+  
+  // Parámetros del Préstamo
+  monto_principal      Decimal  @db.Decimal(10, 2) // Ej. 10,000.00
+  tasa_interes_anual   Decimal  @db.Decimal(5, 4)  // Ej. 0.1500 (15%)
+  plazo_meses          Int      // Número inicial de cuotas
+  cuota_mensual        Decimal  @db.Decimal(10, 2) // Monto de la cuota calculada
+  
+  // Estado Dinámico
+  saldo_restante       Decimal  @db.Decimal(10, 2) // El principal que queda por pagar (CRÍTICO)
+  plazo_restante_cuotas Int     // Se recalcula con abonos a capital
+  estado               String   @default("ACTIVO") // ACTIVO, LIQUIDADO, VENCIDO
+  garantias            String?  // Descripción de las garantías
+
+  // Relaciones
+  client               Client   @relation(fields: [clientId], references: [id])
+  payments             Payment[] // Un Préstamo tiene muchos Pagos
+
+  // Auditoría del Registro
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  createdById String // Quién lo creó
+  updatedById String // Quién hizo la última modificación
+  createdBy   User   @relation("CreatedLoans", fields: [createdById], references: [id])
+  updatedBy   User   @relation("UpdatedLoans", fields: [updatedById], references: [id])
+}
+
+// ----------------------------------------------------
+// 4. PAGOS (Payments/Historial de Transacciones)
+// ----------------------------------------------------
+model Payment {
+  id                     String  @id @default(uuid())
+  loanId                 String  // Clave Foránea al Préstamo
+  
+  fecha_pago             DateTime @default(now())
+  monto_total_pagado     Decimal @db.Decimal(10, 2)
+  
+  // Desglose CRÍTICO
+  aplicado_a_intereses   Decimal @db.Decimal(10, 2)
+  aplicado_a_capital     Decimal @db.Decimal(10, 2)
+  
+  tipo_pago              String  // Cuota Regular, Abono a Capital, Liquidación Total
+  
+  // Relación
+  loan                   Loan    @relation(fields: [loanId], references: [id])
+
+  // Auditoría
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdById String
+  createdBy   User   @relation("CreatedPayments", fields: [createdById], references: [id])
+}
+
+// ----------------------------------------------------
+// 5. REGISTRO DE AUDITORÍA (AuditLog)
+// ----------------------------------------------------
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String   // Quién realizó la acción
+  action    String   // Ej: 'CREATE_LOAN', 'UPDATE_PAYMENT'
+  details   String?  // Descripción JSON de los cambios (ej. { "oldValue": 5000, "newValue": 4000 })
+  timestamp DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id])
+}
