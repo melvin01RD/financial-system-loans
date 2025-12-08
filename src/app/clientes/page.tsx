@@ -31,7 +31,10 @@ export default async function ClientesPage() {
                         <CardTitle className="text-lg">Nuevo Cliente</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <form action={createClient} className="space-y-4">
+                        <form action={async (formData) => {
+                            "use server"
+                            await createClient(formData)
+                        }} className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="nombre">Nombre Completo *</Label>
                                 <Input id="nombre" name="nombre" placeholder="Ej. Juan Pérez" required />
