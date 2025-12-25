@@ -5,20 +5,20 @@ import { revalidatePath } from "next/cache"
 
 export async function createClient(formData: FormData) {
     const nombre = formData.get("nombre") as string
+    const cedula = formData.get("cedula") as string
     const telefono = formData.get("telefono") as string
-    const email = formData.get("email") as string
     const direccion = formData.get("direccion") as string
 
-    if (!nombre || !telefono) {
-        return { success: false, message: "Nombre y teléfono son obligatorios" }
+    if (!nombre || !cedula || !telefono) {
+        return { success: false, message: "Nombre, cédula y teléfono son obligatorios" }
     }
 
     try {
         await db.client.create({
             data: {
                 nombre_completo: nombre,
+                cedula: cedula,
                 telefono: telefono,
-                email: email,
                 direccion: direccion,
             },
         })

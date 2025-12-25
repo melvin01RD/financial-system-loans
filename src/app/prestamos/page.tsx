@@ -3,9 +3,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { PlusCircle, DollarSign } from "lucide-react";
+import { PlusCircle, DollarSign, CalendarDays } from "lucide-react";
 
 export default async function PrestamosPage() {
+    // Buscamos los préstamos con la nueva estructura
     const loans = await db.loan.findMany({
         include: {
             client: true
@@ -39,8 +40,9 @@ export default async function PrestamosPage() {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Cliente</TableHead>
-                                <TableHead>Monto Principal</TableHead>
-                                <TableHead>Saldo Restante</TableHead>
+                                <TableHead>Monto Original</TableHead>
+                                <TableHead>Frecuencia</TableHead>
+                                <TableHead>Saldo Capital</TableHead>
                                 <TableHead>Estado</TableHead>
                                 <TableHead>Acciones</TableHead>
                             </TableRow>
@@ -48,7 +50,7 @@ export default async function PrestamosPage() {
                         <TableBody>
                             {loans.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                                         No hay préstamos registrados aún.
                                     </TableCell>
                                 </TableRow>
@@ -57,18 +59,32 @@ export default async function PrestamosPage() {
                                     <TableRow key={loan.id}>
                                         <TableCell className="font-medium">{loan.client.nombre_completo}</TableCell>
                                         <TableCell>RD$ {loan.monto_principal.toNumber().toFixed(2)}</TableCell>
-                                        <TableCell>RD$ {loan.saldo_restante.toNumber().toFixed(2)}</TableCell>
+                                        
+                                        {/* Columna Nueva: Frecuencia */}
                                         <TableCell>
-                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${loan.estado === 'ACTIVO' ? 'bg-green-100 text-green-700' :
-                                                    loan.estado === 'VENCIDO' ? 'bg-red-100 text-red-700' :
-                                                        'bg-gray-100 text-gray-700'
-                                                }`}>
+                                            <div className="flex items-center gap-1 text-sm text-gray-600">
+                                                <CalendarDays className="w-3 h-3" />
+                                                {loan.plazo_cantidad} meses
+                                            </div>
+                                        </TableCell>
+
+                                        {/* CORREGIDO: saldo_capital en lugar de saldo_restante */}
+                                        <TableCell className="font-bold text-gray-700">
+                                            RD$ {loan.saldo_capital.toNumber().toFixed(2)}
+                                        </TableCell>
+                                        
+                                        <TableCell>
+                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                                loan.estado === 'ACTIVO' ? 'bg-green-100 text-green-700' :
+                                                loan.estado === 'VENCIDO' ? 'bg-red-100 text-red-700' :
+                                                'bg-gray-100 text-gray-700'
+                                            }`}>
                                                 {loan.estado}
                                             </span>
                                         </TableCell>
                                         <TableCell>
-                                            <Link href={`/prestamos/${loan.id}/pagar`} className="text-blue-600 underline hover:text-blue-800">
-                                                Pagar
+                                            <Link href={`/prestamos/${loan.id}/pagar`} className="text-blue-600 underline hover:text-blue-800 text-sm">
+                                                Ver / Pagar
                                             </Link>
                                         </TableCell>
                                     </TableRow>

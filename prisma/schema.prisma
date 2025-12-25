@@ -1,126 +1,150 @@
-
-datasource db {
-  provider  = "postgresql"
-  url  	    = env("DATABASE_URL")
-  // uncomment next line if you use Prisma <5.10
-  // directUrl = env("DATABASE_URL_UNPOOLED")
-}
 generator client {
   provider = "prisma-client-js"
 }
 
-// ----------------------------------------------------
-// 1. USUARIOS (Administradores)
-// Para el sistema de autenticación MLBF (Melvin & Brayan)
-// ----------------------------------------------------
-model User {
-  id    String @id @default(uuid()) // Identificador único del Admin
-  email String @unique
-  name  String?
-  // Campos de seguridad
-  password String
-  role     Role     @default(ADMIN) // Asumimos que todos son ADMIN inicialmente
-
-  // Relaciones de Auditoría (quién creó/actualizó qué)
-  loansCreated Loan[] @relation("CreatedLoans")
-  loansUpdated Loan[] @relation("UpdatedLoans")
-  paymentsCreated Payment[] @relation("CreatedPayments")
-  // ...otros modelos que quieras auditar
-
-  // Auditoría: Registro de todas las acciones del usuario
-  auditLogs AuditLog[]
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-enum Role {
+// ==============================
+// 1. ENUMS
+// ==============================
+enum PaymentFrequency {
+  SEMANAL
+  QUINCENAL
+  MENSUAL
+}
+
+enum ScheduleStatus {
+  PENDIENTE
+  PAGADO
+  PARCIAL
+  VENCIDO
+}
+
+enum LoanStatus {
+  ACTIVO
+  VENCIDO
+  LIQUIDADO
+  CANCELADO
+}
+
+enum PaymentType {
+  CUOTA_REGULAR
+  ABONO_CAPITAL
+  CANCELACION_TOTAL
+}
+
+enum UserRole {
   ADMIN
-  SUPERVISOR
+  OFFICER
 }
 
-// ----------------------------------------------------
-// 2. CLIENTES (Prestatarios)
-// ----------------------------------------------------
-model Client {
-  id           String @id @default(uuid())
-  nombre_completo String
-  direccion    String?
-  telefono     String
-  email        String?
+// ==============================
+// 2. MODELOS DE USUARIO Y CLIENTE
+// ==============================
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String?
+  role      UserRole @default(OFFICER)
   
-  // Relación: Un cliente puede tener muchos préstamos
+  // Relaciones necesarias para que Loan no de error
+  createdLoans    Loan[]    @relation("CreatedLoans")
+  updatedLoans    Loan[]    @relation("UpdatedLoans")
+  createdPayments Payment[] @relation("CreatedPayments")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Client {
+  id              String @id @default(uuid())
+  nombre_completo String
+  cedula          String @unique
+  telefono        String
+  direccion       String?
+  
   loans Loan[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// ----------------------------------------------------
+// ==============================
 // 3. PRÉSTAMOS (Loans)
-// ----------------------------------------------------
+// ==============================
 model Loan {
-  id                   String   @id @default(uuid())
-  clientId             String   // Clave Foránea al Cliente
-  
-  // Parámetros del Préstamo
-  monto_principal      Decimal  @db.Decimal(10, 2) // Ej. 10,000.00
-  tasa_interes_anual   Decimal  @db.Decimal(5, 4)  // Ej. 0.1500 (15%)
-  plazo_meses          Int      // Número inicial de cuotas
-  cuota_mensual        Decimal  @db.Decimal(10, 2) // Monto de la cuota calculada
-  
-  // Estado Dinámico
-  saldo_restante       Decimal  @db.Decimal(10, 2) // El principal que queda por pagar (CRÍTICO)
-  plazo_restante_cuotas Int     // Se recalcula con abonos a capital
-  estado               String   @default("ACTIVO") // ACTIVO, LIQUIDADO, VENCIDO
-  garantias            String?  // Descripción de las garantías
+  id                 String           @id @default(uuid())
+  clientId           String
+  monto_principal    Decimal          @db.Decimal(10, 2)
+  tasa_interes_anual Decimal          @db.Decimal(10, 4)
+  frecuencia_pago    PaymentFrequency @default(MENSUAL)
+  plazo_cantidad     Int              
+  cuota_fija         Decimal          @db.Decimal(10, 2)
+  fecha_desembolso   DateTime         @default(now())
+  saldo_capital      Decimal          @db.Decimal(10, 2)
+  saldo_interes      Decimal          @db.Decimal(10, 2) @default(0)
+  estado             LoanStatus       @default(ACTIVO)
+  garantias          String?
 
-  // Relaciones
-  client               Client   @relation(fields: [clientId], references: [id])
-  payments             Payment[] // Un Préstamo tiene muchos Pagos
+  client               Client                 @relation(fields: [clientId], references: [id])
+  amortizationSchedule AmortizationSchedule[]
+  payments             Payment[]
 
-  // Auditoría del Registro
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   
-  createdById String // Quién lo creó
-  updatedById String // Quién hizo la última modificación
-  createdBy   User   @relation("CreatedLoans", fields: [createdById], references: [id])
-  updatedBy   User   @relation("UpdatedLoans", fields: [updatedById], references: [id])
-}
-
-// ----------------------------------------------------
-// 4. PAGOS (Payments/Historial de Transacciones)
-// ----------------------------------------------------
-model Payment {
-  id                     String  @id @default(uuid())
-  loanId                 String  // Clave Foránea al Préstamo
-  
-  fecha_pago             DateTime @default(now())
-  monto_total_pagado     Decimal @db.Decimal(10, 2)
-  
-  // Desglose CRÍTICO
-  aplicado_a_intereses   Decimal @db.Decimal(10, 2)
-  aplicado_a_capital     Decimal @db.Decimal(10, 2)
-  
-  tipo_pago              String  // Cuota Regular, Abono a Capital, Liquidación Total
-  
-  // Relación
-  loan                   Loan    @relation(fields: [loanId], references: [id])
-
-  // Auditoría
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
   createdById String
-  createdBy   User   @relation("CreatedPayments", fields: [createdById], references: [id])
+  updatedById String?
+  createdBy   User     @relation("CreatedLoans", fields: [createdById], references: [id])
+  updatedBy   User?    @relation("UpdatedLoans", fields: [updatedById], references: [id])
+
+  @@index([clientId])
+  @@index([estado])
 }
 
-// ----------------------------------------------------
-// 5. REGISTRO DE AUDITORÍA (AuditLog)
-// ----------------------------------------------------
-model AuditLog {
-  id        String   @id @default(uuid())
-  userId    String   // Quién realizó la acción
-  action    String   // Ej: 'CREATE_LOAN', 'UPDATE_PAYMENT'
-  details   String?  // Descripción JSON de los cambios (ej. { "oldValue": 5000, "newValue": 4000 })
-  timestamp DateTime @default(now())
-  
-  user User @relation(fields: [userId], references: [id])
+// ==============================
+// 4. TABLA DE AMORTIZACIÓN
+// ==============================
+model AmortizationSchedule {
+  id                String         @id @default(uuid())
+  loanId            String
+  numero_cuota      Int
+  fecha_vencimiento DateTime
+  monto_cuota       Decimal        @db.Decimal(10, 2)
+  capital_cuota     Decimal        @db.Decimal(10, 2)
+  interes_cuota     Decimal        @db.Decimal(10, 2)
+  saldo_pendiente   Decimal        @db.Decimal(10, 2)
+  estado            ScheduleStatus @default(PENDIENTE)
+
+  loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([loanId])
+  @@index([fecha_vencimiento])
+}
+
+// ==============================
+// 5. PAGOS
+// ==============================
+model Payment {
+  id                   String      @id @default(uuid())
+  loanId               String
+  fecha_pago           DateTime    @default(now())
+  monto_total_pagado   Decimal     @db.Decimal(10, 2)
+  aplicado_a_intereses Decimal     @db.Decimal(10, 2)
+  aplicado_a_capital   Decimal     @db.Decimal(10, 2)
+  aplicado_a_mora      Decimal     @db.Decimal(10, 2) @default(0)
+  tipo_pago            PaymentType
+
+  loan Loan @relation(fields: [loanId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+  createdBy   User?    @relation("CreatedPayments", fields: [createdById], references: [id])
+
+  @@index([loanId])
 }
