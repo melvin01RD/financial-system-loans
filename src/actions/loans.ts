@@ -1,6 +1,6 @@
 'use server'
 
-import { db } from "@/lib/db"
+import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { LoanStatus, PaymentFrequency } from "@prisma/client"
 import { auth } from "@/auth"
@@ -97,7 +97,7 @@ export async function createLoan(formData: FormData) {
         )
 
         // 3. GUARDAR EN BD (USANDO NOMBRES EXACTOS DE PRISMA)
-        await db.loan.create({
+        await prisma.loan.create({
             data: {
                 clientId,
                 monto_principal: montoPrincipal,

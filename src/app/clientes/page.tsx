@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { prisma } from "@/lib/prisma";
 import { Client } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,7 @@ import Link from "next/link";
 
 export default async function ClientesPage() {
     // 1. Obtenemos los clientes de la BD
-    const clients: Client[] = await db.client.findMany({
+    const clients: Client[] = await prisma.client.findMany({
         orderBy: { createdAt: 'desc' }
     });
 
@@ -51,7 +51,7 @@ export default async function ClientesPage() {
                             ) : (
                                 clients.map((client) => (
                                     <TableRow key={client.id}>
-                                        <TableCell className="font-medium">{client.nombre_completo}</TableCell>
+                                        <TableCell className="font-medium">{client.nombre}</TableCell>
                                         <TableCell>{client.telefono}</TableCell>
                                         <TableCell>{client.direccion || "-"}</TableCell>
                                     </TableRow>

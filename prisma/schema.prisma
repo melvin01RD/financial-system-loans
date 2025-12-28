@@ -48,10 +48,11 @@ model User {
   id        String   @id @default(uuid())
   email     String   @unique
   password  String
-  name      String?
+  nombre    String
+  apellido  String
   role      UserRole @default(OFFICER)
   
-  // Relaciones necesarias para que Loan no de error
+  // Relaciones necesarias
   createdLoans    Loan[]    @relation("CreatedLoans")
   updatedLoans    Loan[]    @relation("UpdatedLoans")
   createdPayments Payment[] @relation("CreatedPayments")
@@ -62,11 +63,17 @@ model User {
 
 model Client {
   id              String @id @default(uuid())
-  nombre_completo String
+  nombre          String
+  apellido        String
   cedula          String @unique
   telefono        String
   direccion       String?
-  
+  email           String @unique
+  fecha_nacimiento DateTime
+  password        String
+  moneda          String @default("DOP")
+  estado          String @default("ACTIVO")
+
   loans Loan[]
 
   createdAt DateTime @default(now())
@@ -90,7 +97,8 @@ model Loan {
   estado             LoanStatus       @default(ACTIVO)
   garantias          String?
 
-  client               Client                 @relation(fields: [clientId], references: [id])
+  // Relaciones
+  client               Client                @relation(fields: [clientId], references: [id])
   amortizationSchedule AmortizationSchedule[]
   payments             Payment[]
 
@@ -99,6 +107,8 @@ model Loan {
   
   createdById String
   updatedById String?
+
+  // RELACIONES CORREGIDAS (Sin duplicados y con el tipo User correcto)
   createdBy   User     @relation("CreatedLoans", fields: [createdById], references: [id])
   updatedBy   User?    @relation("UpdatedLoans", fields: [updatedById], references: [id])
 
