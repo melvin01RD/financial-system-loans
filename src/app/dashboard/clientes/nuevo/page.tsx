@@ -5,8 +5,25 @@ export const dynamic = 'force-dynamic';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+// --- UTILIDADES DE MÁSCARA ---
+const formatCedula = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 10)}-${digits.slice(10)}`;
+};
+
+const formatTelefono = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+};
+
 export default function NuevoClientePage() {
   const router = useRouter();
+  
+  // 1. ESTADO ÚNICO DEL FORMULARIO
   const [formData, setFormData] = useState({
     nombre: '',
     apellido: '',
@@ -17,10 +34,13 @@ export default function NuevoClientePage() {
     fechaNacimiento: '',
     password: '',
   });
+
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [mostrarPassword, setMostrarPassword] = useState(false);
 
+  // 2. TU GENERADOR DE CONTRASEÑA ORIGINAL
   const generarPassword = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
     let password = '';
@@ -30,42 +50,62 @@ export default function NuevoClientePage() {
     setFormData({ ...formData, password });
   };
 
- const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+  // 3. ENVÍO AL BACKEND
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setError('');
+  setSuccess('');
+  setLoading(true);
 
-    // 1. Preparamos los datos para que coincidan con tu schema.prisma
-    // Unificamos nombre y apellido en 'nombre_completo'
-    const dataParaPrisma = {
-      nombre_completo: `${formData.nombre} ${formData.apellido}`.trim(),
-      cedula: formData.cedula,
-      telefono: formData.telefono,
-      email: formData.email,
-      direccion: formData.direccion,
-      // Si tu schema pide password, puedes incluirlo, si no, quítalo:
-      // password: formData.password 
-    };
+  // KLK AQUÍ: Limpiamos los datos para que el Backend no rebote el 400
+  const dataParaEnviar = {
+    nombre: formData.nombre,
+    apellido: formData.apellido,
+    // .replace(/\D/g, '') elimina guiones y paréntesis, deja solo NÚMEROS
+    cedula: formData.cedula.replace(/\D/g, ''), 
+    telefono: formData.telefono.replace(/\D/g, ''),
+    email: formData.email,
+    direccion: formData.direccion,
+    password: formData.password || "password123", 
+    fecha_nacimiento: formData.fechaNacimiento // Asegúrate que la API lo espere así
+  };
 
-    try {
-      const token = localStorage.getItem('token');
+ try {
       const res = await fetch('/api/clientes', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(dataParaPrisma), // <-- Enviamos el objeto corregido
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dataParaEnviar),
       });
 
+      const resultado = await res.json();
+
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Error al guardar el cliente');
+        if (resultado.detalles) {
+          throw new Error(resultado.detalles[0].mensaje);
+        }
+        throw new Error(resultado.error || 'Error al guardar');
       }
 
-      // Si todo sale bien, volvemos al dashboard o listado
-      router.push('/dashboard');
+      // ACCIÓN DE ÉXITO
+      setSuccess('¡Cliente creado de manera satisfactoria!');
+      
+      // Limpiamos el formulario
+      setFormData({
+        nombre: '',
+        apellido: '',
+        email: '',
+        telefono: '',
+        direccion: '',
+        cedula: '',
+        fechaNacimiento: '',
+        password: '',
+      });
+
+      // Quitamos el mensaje de éxito después de 3 segundos
+      setTimeout(() => setSuccess(''), 3000);
+      
       router.refresh();
+
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -74,187 +114,122 @@ export default function NuevoClientePage() {
   };
 
   return (
-    <>
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Nuevo Cliente</h2>
-            <p className="text-sm text-gray-500 mt-1">Registra un nuevo cliente en el sistema</p>
-          </div>
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            <span>←</span>
-            <span>Volver</span>
-          </button>
+    <div className="max-w-4xl mx-auto p-6">
+      <header className="flex justify-between items-center mb-8 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Nuevo Cliente</h2>
+          <p className="text-gray-500 text-sm">Registra la información del prestamista</p>
         </div>
+        <button onClick={() => router.back()} className="text-gray-500 hover:text-gray-800 transition-colors">
+          ← Volver atrás
+        </button>
       </header>
 
-      {/* Content */}
-      <main className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-3xl mx-auto">
-          <div className="bg-white shadow-sm rounded-xl p-8 border border-gray-200">
-            {error && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                {error}
-              </div>
-            )}
+      <div className="bg-white shadow-xl rounded-2xl p-8 border border-gray-100">
+        {/* ALERTAS DE FEEDBACK */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded flex items-center">
+            <span className="mr-3">⚠️</span>
+            <p className="font-medium">{error}</p>
+          </div>
+        )}
+        {success && (
+          <div className="mb-6 p-4 bg-green-50 border-l-4 border-green-500 text-green-700 rounded flex items-center animate-pulse">
+            <span className="mr-3">✅</span>
+            <p className="font-medium">{success}</p>
+          </div>
+        )}
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nombre *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.nombre}
-                    onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-gray-600">Nombre *</label>
+            <input type="text" required className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-400"
+              value={formData.nombre} onChange={(e) => setFormData({...formData, nombre: e.target.value})} />
+          </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Apellido *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.apellido}
-                    onChange={(e) => setFormData({ ...formData, apellido: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-gray-600">Apellido *</label>
+            <input type="text" required className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-400"
+              value={formData.apellido} onChange={(e) => setFormData({...formData, apellido: e.target.value})} />
+          </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Cédula * <span className="text-xs text-gray-500">(mínimo 5 caracteres)</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    minLength={5}
-                    value={formData.cedula}
-                    onChange={(e) => setFormData({ ...formData, cedula: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-gray-600">Cédula *</label>
+            <input type="text" required placeholder="001-0000000-0" className="w-full p-3 border rounded-lg font-mono outline-none focus:ring-2 focus:ring-blue-400"
+              value={formData.cedula} onChange={(e) => setFormData({...formData, cedula: formatCedula(e.target.value)})} />
+          </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Fecha de Nacimiento *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.fechaNacimiento}
-                    onChange={(e) => setFormData({ ...formData, fechaNacimiento: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-gray-600">Teléfono *</label>
+            <input type="text" required placeholder="(000) 000-0000" className="w-full p-3 border rounded-lg font-mono outline-none focus:ring-2 focus:ring-blue-400"
+              value={formData.telefono} onChange={(e) => setFormData({...formData, telefono: formatTelefono(e.target.value)})} />
+          </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email *
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-gray-600">Email *</label>
+            <input type="email" required className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-400"
+              value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
+          </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Teléfono * <span className="text-xs text-gray-500">(mínimo 8 caracteres)</span>
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    minLength={8}
-                    value={formData.telefono}
-                    onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-gray-600">Fecha de Nacimiento *</label>
+            <input type="date" required className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-400"
+              value={formData.fechaNacimiento} onChange={(e) => setFormData({...formData, fechaNacimiento: e.target.value})} />
+          </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Dirección *
-                </label>
-                <textarea
-                  required
-                  value={formData.direccion}
-                  onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
-                  rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          <div className="md:col-span-2 space-y-2">
+            <label className="text-sm font-semibold text-gray-600">Dirección</label>
+            <textarea rows={2} className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-400"
+              value={formData.direccion} onChange={(e) => setFormData({...formData, direccion: e.target.value})} />
+          </div>
+
+          {/* CONTRASEÑA CON GENERADOR */}
+          <div className="md:col-span-2 space-y-2">
+            <label className="text-sm font-semibold text-gray-600">Contraseña (Acceso Cliente)</label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  type={mostrarPassword ? "text" : "password"}
+                  className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-400"
+                  value={formData.password}
+                  onChange={(e) => setFormData({...formData, password: e.target.value})}
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Contraseña (Opcional)
-                </label>
-                <div className="flex space-x-2">
-                  <div className="flex-1 relative">
-                    <input
-                      type={mostrarPassword ? "text" : "password"}
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      placeholder="Contraseña para acceso del cliente"
-                      className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setMostrarPassword(!mostrarPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                      title={mostrarPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                    >
-                      <i className={`fa-solid ${mostrarPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={generarPassword}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors whitespace-nowrap"
-                    title="Generar contraseña aleatoria"
-                  >
-                    <i className="fa-solid fa-key mr-2"></i>
-                    Generar
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Genera una contraseña segura o déjala en blanco si no necesitas acceso del cliente
-                </p>
-              </div>
-
-              <div className="flex justify-end space-x-4">
                 <button
                   type="button"
-                  onClick={() => router.push('/dashboard')}
-                  className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  onClick={() => setMostrarPassword(!mostrarPassword)}
+                  className="absolute right-3 top-3"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                >
-                  {loading ? 'Guardando...' : 'Guardar Cliente'}
+                  {mostrarPassword ? "🙈" : "👁️"}
                 </button>
               </div>
-            </form>
+              <button
+                type="button"
+                onClick={generarPassword}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold transition-colors"
+              >
+                Generar
+              </button>
+            </div>
           </div>
-        </div>
-      </main>
-    </>
+
+          <div className="md:col-span-2 pt-6 flex gap-4">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="flex-1 px-6 py-4 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 font-semibold"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-[2] bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all disabled:opacity-50 shadow-lg"
+            >
+              {loading ? 'Guardando...' : 'Confirmar Registro'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }

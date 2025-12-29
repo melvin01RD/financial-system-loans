@@ -7,8 +7,8 @@ import Link from "next/link";
 export default async function CrearPrestamoPage() {
     try {
         const clients = await prisma.client.findMany({
-            select: { id: true, nombre_completo: true },
-            orderBy: { nombre_completo: 'asc' },
+            select: { id: true, nombre: true },
+            orderBy: { nombre: 'asc' },
         });
 
         return (
