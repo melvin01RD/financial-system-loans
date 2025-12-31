@@ -45,14 +45,13 @@ enum UserRole {
 // 2. MODELOS DE USUARIO Y CLIENTE
 // ==============================
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  nombre    String
-  apellido  String
-  role      UserRole @default(OFFICER)
+  id           String    @id @default(uuid())
+  email        String    @unique
+  password     String
+  nombre       String
+  apellido     String
+  role         UserRole  @default(OFFICER)
   
-  // Relaciones necesarias
   createdLoans    Loan[]    @relation("CreatedLoans")
   updatedLoans    Loan[]    @relation("UpdatedLoans")
   createdPayments Payment[] @relation("CreatedPayments")
@@ -62,19 +61,20 @@ model User {
 }
 
 model Client {
-  id              String @id @default(uuid())
+  id              String   @id @default(uuid())
   nombre          String
   apellido        String?
-  cedula          String @unique
+  cedula          String   @unique
   telefono        String
   direccion       String?
-  email           String @unique
+  email           String   @unique
   fecha_nacimiento DateTime
   password        String
-  moneda          String @default("DOP")
-  estado          String @default("ACTIVO")
+  moneda          String   @default("DOP")
+  estado          String   @default("ACTIVO")
 
-  loans Loan[]
+  loans           Loan[]
+  evaluaciones    Evaluacion[] // Relación añadida para que compile
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -84,20 +84,19 @@ model Client {
 // 3. PRÉSTAMOS (Loans)
 // ==============================
 model Loan {
-  id                 String           @id @default(uuid())
-  clientId           String
-  monto_principal    Decimal          @db.Decimal(10, 2)
-  tasa_interes_anual Decimal          @db.Decimal(10, 4)
-  frecuencia_pago    PaymentFrequency @default(MENSUAL)
-  plazo_cantidad     Int              
-  cuota_fija         Decimal          @db.Decimal(10, 2)
-  fecha_desembolso   DateTime         @default(now())
-  saldo_capital      Decimal          @db.Decimal(10, 2)
-  saldo_interes      Decimal          @db.Decimal(10, 2) @default(0)
-  estado             LoanStatus       @default(ACTIVO)
-  garantias          String?
+  id                  String           @id @default(uuid())
+  clientId            String
+  monto_principal     Decimal          @db.Decimal(10, 2)
+  tasa_interes_anual  Decimal          @db.Decimal(10, 4)
+  frecuencia_pago     PaymentFrequency @default(MENSUAL)
+  plazo_cantidad      Int              
+  cuota_fija          Decimal          @db.Decimal(10, 2)
+  fecha_desembolso    DateTime         @default(now())
+  saldo_capital       Decimal          @db.Decimal(10, 2)
+  saldo_interes       Decimal          @db.Decimal(10, 2) @default(0)
+  estado              LoanStatus       @default(ACTIVO)
+  garantias           String?
 
-  // Relaciones
   client               Client                @relation(fields: [clientId], references: [id])
   amortizationSchedule AmortizationSchedule[]
   payments             Payment[]
@@ -108,7 +107,6 @@ model Loan {
   createdById String
   updatedById String?
 
-  // RELACIONES CORREGIDAS (Sin duplicados y con el tipo User correcto)
   createdBy   User     @relation("CreatedLoans", fields: [createdById], references: [id])
   updatedBy   User?    @relation("UpdatedLoans", fields: [updatedById], references: [id])
 
@@ -157,4 +155,25 @@ model Payment {
   createdBy   User?    @relation("CreatedPayments", fields: [createdById], references: [id])
 
   @@index([loanId])
+}
+
+// ==============================
+// 6. EVALUACIÓN (Corregido fuera de Payment)
+// ==============================
+model Evaluacion {
+  id                      String   @id @default(cuid())
+  clienteId               String
+  cliente                 Client   @relation(fields: [clienteId], references: [id])
+  ingresosMensuales       Float
+  gastosMensuales         Float
+  porcentajeEndeudamiento Float    @default(40)
+  capacidadPago           Float    
+  cuotaMaxima             Float    
+  // --- AÑADE ESTOS 3 CAMPOS NUEVOS ---
+  fuenteIngresos          String?
+  garantia                String?
+  observaciones           String?
+  // ----------------------------------
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 }

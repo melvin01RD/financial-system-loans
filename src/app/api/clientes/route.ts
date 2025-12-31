@@ -14,6 +14,25 @@ const clienteSchema = z.object({
   fecha_nacimiento: z.string(), // Recibimos el string del input date
 });
 
+
+export async function GET() {
+  try {
+    const clientes = await prisma.client.findMany({
+      orderBy: { nombre: 'asc' }, 
+      select: {
+        id: true,
+        nombre: true,
+        apellido: true,
+        cedula: true
+      }
+    })
+    console.log(clientes)
+    return NextResponse.json(clientes);
+  } catch (error) {
+    return NextResponse.json({ error: "Error al obtener clientes" }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();

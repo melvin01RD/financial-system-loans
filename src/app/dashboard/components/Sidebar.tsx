@@ -69,6 +69,7 @@ export default function Sidebar({ activeTab, setActiveTab, user, clientes, credi
     const routes: Record<string, string> = {
       'prestamos': '/dashboard/prestamos/crear',
       'clientes': '/dashboard/clientes/nuevo',
+      'evaluacion': '/dashboard/evaluacion/nueva',
     };
 
     const targetRoute = routes[itemId] || `/dashboard?tab=${itemId}`;

@@ -19,7 +19,7 @@ export async function createClient(formData: FormData) {
     try {
         await prisma.client.create({
             data: {
-                nombre:nombre,
+                nombre: nombre,
                 apellido: apellido,
                 cedula: cedula,
                 telefono: telefono,
