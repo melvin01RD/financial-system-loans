@@ -13,6 +13,25 @@ const evaluacionSchema = z.object({
   observaciones: z.string().optional(),  // Permitir campo opcional
 });
 
+
+// Agrega esto en src/app/api/evaluaciones/route.ts
+
+export async function GET() {
+  try {
+    const evaluaciones = await prisma.evaluacion.findMany({
+      include: {
+        cliente: true // Para traer nombre y cédula del cliente
+      },
+      orderBy: {
+        createdAt: 'desc' // Las más recientes primero
+      }
+    });
+    return NextResponse.json(evaluaciones);
+  } catch (error) {
+    return NextResponse.json({ error: "Error al obtener historial" }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
