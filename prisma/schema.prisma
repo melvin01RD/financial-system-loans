@@ -98,6 +98,11 @@ model Loan {
   saldo_interes      Decimal          @default(0) @db.Decimal(10, 2)
   estado             LoanStatus       @default(ACTIVO)
   garantias          String?
+  configId           String?    
+  config             LoanConfig? @relation(fields: [configId], references: [id])
+
+
+
 
   client               Client                 @relation(fields: [clientId], references: [id])
   amortizationSchedule AmortizationSchedule[]
@@ -177,4 +182,21 @@ model Evaluacion {
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
   Loan                    Loan?
+}
+
+// ==============================
+// 7. CONFIGURACIÓN DE CRÉDITOS
+// ==============================
+model LoanConfig {
+  id              String   @id @default(uuid())
+  nombre          String   // Ejemplo: "Préstamo Personal"
+  tasa_interes    Decimal  @db.Decimal(5, 2)
+  plazo_maximo    Int      // En meses o cuotas
+  mora_porcentaje Decimal  @db.Decimal(5, 2)
+  dias_gracia     Int      @default(3)
+  
+  loans           Loan[]   // Relación con los préstamos creados con esta config
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

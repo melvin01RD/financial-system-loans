@@ -1,407 +1,248 @@
 'use client';
-
-export const dynamic = 'force-dynamic';
-
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, DollarSign, User, FileText, CheckCircle2, AlertCircle, ArrowLeft } from "lucide-react";
 
-export default function NuevoPagoPage() {
+export default function RegistrarPagoPage() {
   const router = useRouter();
-  const [creditos, setCreditos] = useState<any[]>([]);
-  const [creditoSeleccionado, setCreditoSeleccionado] = useState<any>(null);
-  const [cuotasDisponibles, setCuotasDisponibles] = useState<any[]>([]);
-  const [user, setUser] = useState<any>(null);
-  const [empresa, setEmpresa] = useState<any>(null);
-
-  // Obtener moneda de la empresa
-  const monedaEmpresa = empresa?.moneda || 'USD';
-  const simboloMoneda = getCurrencySymbol(monedaEmpresa);
-  const formatMoney = (amount: number, decimals = 2) => formatCurrency(amount, monedaEmpresa, { decimals });
-
-  const [formData, setFormData] = useState({
-    creditoId: '',
-    monto: '',
-    metodoPago: 'efectivo',
-    fechaPago: new Date().toISOString().split('T')[0],
-    tipoPago: 'cuotas', // cuotas o aporte_capital
-  });
-  const [cuotasACubrir, setCuotasACubrir] = useState<number>(1);
+  
+  // Estados de Datos
+  const [clientes, setClientes] = useState<any[]>([]);
+  const [prestamos, setPrestamos] = useState<any[]>([]);
+  
+  // Estados de Selección
+  const [selectedClienteId, setSelectedClienteId] = useState('');
+  const [selectedLoanId, setSelectedLoanId] = useState('');
+  const [monto, setMonto] = useState('');
+  
+  // Estados de UI
+  const [loadingLoans, setLoadingLoans] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
+  // 1. Cargar Clientes al inicio
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      const parsedUser = JSON.parse(userData);
-      setUser(parsedUser);
-      // Cargar empresa activa
-      if (parsedUser.empresaActivaId) {
-        loadEmpresa(parsedUser.empresaActivaId);
-      }
-    }
-    loadCreditos();
+    fetch('/api/clientes')
+      .then(res => res.json())
+      .then(data => setClientes(data))
+      .catch(err => console.error(err));
   }, []);
 
-  const loadEmpresa = async (empresaId: string) => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/api/empresas/${empresaId}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (res.ok) {
-        setEmpresa(await res.json());
-      }
-    } catch (error) {
-      console.error('Error al cargar empresa:', error);
-    }
-  };
-
+  // 2. Cargar Préstamos cuando cambia el cliente
   useEffect(() => {
-    if (formData.creditoId) {
-      const credito = creditos.find(c => c.id === formData.creditoId);
-      setCreditoSeleccionado(credito);
-      if (credito) {
-        const cuotasPendientes = credito.cuotas?.filter((c: any) => !c.pagado) || [];
-        setCuotasDisponibles(cuotasPendientes);
-      }
-    } else {
-      setCreditoSeleccionado(null);
-      setCuotasDisponibles([]);
+    if (!selectedClienteId) {
+        setPrestamos([]);
+        return;
     }
-  }, [formData.creditoId, creditos]);
+    setLoadingLoans(true);
+    fetch(`/api/prestamos?clientId=${selectedClienteId}&estado=ACTIVO`)
+      .then(res => res.json())
+      .then(data => setPrestamos(data))
+      .catch(err => console.error(err))
+      .finally(() => setLoadingLoans(false));
+  }, [selectedClienteId]);
 
-  useEffect(() => {
-    if (formData.tipoPago === 'cuotas' && formData.monto && cuotasDisponibles.length > 0) {
-      const monto = parseFloat(formData.monto);
-      let montoRestante = monto;
-      let cuotasCubiertas = 0;
-
-      for (const cuota of cuotasDisponibles) {
-        if (montoRestante >= cuota.montoCuota) {
-          montoRestante -= cuota.montoCuota;
-          cuotasCubiertas++;
-        } else {
-          break;
-        }
-      }
-
-      setCuotasACubrir(cuotasCubiertas || 1);
-    } else if (formData.tipoPago === 'aporte_capital') {
-      setCuotasACubrir(0);
-    }
-  }, [formData.monto, formData.tipoPago, cuotasDisponibles]);
-
-  const loadCreditos = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/creditos', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        // Filtrar solo créditos validados o activos
-        const creditosActivos = data.filter((c: any) => 
-          c.estado === 'validado' || c.estado === 'activo'
-        );
-        setCreditos(creditosActivos);
-      }
-    } catch (error) {
-      console.error('Error al cargar créditos:', error);
-    }
-  };
+  const selectedLoan = prestamos.find(p => p.id === selectedLoanId);
+  
+  // Calcular sugerencia de pago (Cuota o Saldo Total)
+  const sugerenciaPago = selectedLoan 
+    ? (selectedLoan.amortizationSchedule?.[0]?.monto_cuota || selectedLoan.saldo_capital) 
+    : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitting(true);
     setError('');
-    setLoading(true);
+    setSuccess(false);
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/pagos', {
+      const res = await fetch('/api/cobros', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          creditoId: formData.creditoId,
-          monto: parseFloat(formData.monto),
-          metodoPago: formData.metodoPago,
-          fechaPago: formData.fechaPago,
-          tipoPago: formData.tipoPago,
-          cuotasACubrir: cuotasACubrir,
-        }),
+            loanId: selectedLoanId,
+            monto: parseFloat(monto),
+            tipoPago: 'CUOTA_REGULAR'
+        })
       });
 
-      if (!res.ok) {
+      if (res.ok) {
+        setSuccess(true);
+        setMonto('');
+        setSelectedLoanId(''); 
+        // Refrescar préstamos para ver nuevo saldo
+        fetch(`/api/prestamos?clientId=${selectedClienteId}&estado=ACTIVO`)
+            .then(r => r.json())
+            .then(d => setPrestamos(d));
+            
+        setTimeout(() => setSuccess(false), 4000);
+      } else {
         const data = await res.json();
-        throw new Error(data.error || 'Error al registrar pago');
+        setError(data.error || 'Error al registrar el cobro');
       }
-
-      router.push('/dashboard?tab=pagos');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError('Error de conexión');
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
-  const calcularTotalCuotas = () => {
-    return cuotasDisponibles
-      .slice(0, cuotasACubrir)
-      .reduce((sum, c) => sum + c.montoCuota, 0);
-  };
-
   return (
-    <>
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Registrar Pago</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              {formData.tipoPago === 'cuotas' ? 'Registra un pago de cuotas de crédito' : 'Realiza un aporte directo al capital del crédito'}
-            </p>
-          </div>
-          <button
-            onClick={() => router.push('/dashboard?tab=pagos')}
-            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            <span>←</span>
-            <span>Volver</span>
-          </button>
-        </div>
-      </header>
+    <div className="max-w-4xl mx-auto p-6">
+      <Button variant="ghost" onClick={() => router.back()} className="mb-4">
+        <ArrowLeft className="mr-2 h-4 w-4" /> Volver
+      </Button>
 
-      <main className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-3xl mx-auto">
-          <div className="bg-white shadow-sm rounded-xl p-8 border border-gray-200">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* COLUMNA IZQUIERDA: FORMULARIO */}
+        <Card className="md:col-span-1 shadow-lg border-t-4 border-green-600">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl text-green-700">
+              <DollarSign className="w-6 h-6" /> Registrar Nuevo Cobro
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            
+            {success && (
+                <div className="p-4 bg-green-50 text-green-700 rounded-lg flex items-center gap-3 animate-pulse">
+                    <CheckCircle2 size={24} />
+                    <div>
+                        <p className="font-bold">¡Pago Registrado!</p>
+                        <p className="text-sm">El saldo ha sido actualizado.</p>
+                    </div>
+                </div>
+            )}
+            
             {error && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                {error}
-              </div>
+                <div className="p-3 bg-red-100 text-red-700 rounded flex items-center gap-2">
+                    <AlertCircle size={18}/>{error}
+                </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Crédito *
-                </label>
-                <select
-                  required
-                  value={formData.creditoId}
-                  onChange={(e) => setFormData({ ...formData, creditoId: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Seleccione un crédito</option>
-                  {creditos.map((credito) => (
-                    <option key={credito.id} value={credito.id}>
-                      {credito.cliente?.nombre} {credito.cliente?.apellido} - {formatMoney(credito.monto)} ({credito.estado})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tipo de Pago *
-                </label>
-                <div className="grid grid-cols-2 gap-4">
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, tipoPago: 'cuotas' })}
-                    className={`px-4 py-3 border-2 rounded-lg text-left transition-all ${
-                      formData.tipoPago === 'cuotas'
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-300 hover:border-gray-400'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-2">
-                      <i className="fa-solid fa-calendar-check text-lg"></i>
-                      <div>
-                        <div className="font-semibold">Pago de Cuotas</div>
-                        <div className="text-xs text-gray-600">Paga las cuotas programadas</div>
-                      </div>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, tipoPago: 'aporte_capital' })}
-                    className={`px-4 py-3 border-2 rounded-lg text-left transition-all ${
-                      formData.tipoPago === 'aporte_capital'
-                        ? 'border-green-500 bg-green-50'
-                        : 'border-gray-300 hover:border-gray-400'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-2">
-                      <i className="fa-solid fa-piggy-bank text-lg"></i>
-                      <div>
-                        <div className="font-semibold">Aporte a Capital</div>
-                        <div className="text-xs text-gray-600">Reduce el saldo y recalcula cuotas</div>
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {creditoSeleccionado && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-blue-900 mb-2">Información del Crédito</h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-blue-700">Monto total:</span>
-                      <span className="font-semibold ml-2">{formatMoney(creditoSeleccionado.monto)}</span>
-                    </div>
-                    <div>
-                      <span className="text-blue-700">Cuota mensual:</span>
-                      <span className="font-semibold ml-2">{formatMoney(creditoSeleccionado.cuotaMensual)}</span>
-                    </div>
-                    <div>
-                      <span className="text-blue-700">Cuotas pendientes:</span>
-                      <span className="font-semibold ml-2">{cuotasDisponibles.length} de {creditoSeleccionado.plazoMeses}</span>
-                    </div>
-                    <div>
-                      <span className="text-blue-700">Saldo pendiente:</span>
-                      <span className="font-semibold ml-2">
-                        {formatMoney(cuotasDisponibles.reduce((sum: number, c: any) => sum + c.montoCuota, 0))}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Monto a Pagar ({simboloMoneda}) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={formData.monto}
-                    onChange={(e) => setFormData({ ...formData, monto: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="0.00"
-                    disabled={!formData.creditoId}
-                  />
+            <form onSubmit={handleSubmit} className="space-y-5">
+                {/* 1. SELECCIÓN DE CLIENTE */}
+                <div className="space-y-2">
+                    <Label className="flex items-center gap-2"><User size={16}/> Cliente</Label>
+                    <Select onValueChange={setSelectedClienteId} value={selectedClienteId}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Buscar cliente..." />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[200px]">
+                            {clientes.map(c => (
+                                <SelectItem key={c.id} value={c.id}>{c.nombre} {c.apellido}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Método de Pago *
-                  </label>
-                  <select
-                    required
-                    value={formData.metodoPago}
-                    onChange={(e) => setFormData({ ...formData, metodoPago: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="efectivo">Efectivo</option>
-                    <option value="transferencia">Transferencia</option>
-                    <option value="tarjeta">Tarjeta</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Fecha de Pago *
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={formData.fechaPago}
-                  onChange={(e) => setFormData({ ...formData, fechaPago: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              {formData.tipoPago === 'cuotas' && formData.monto && cuotasDisponibles.length > 0 && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-green-900 mb-3">Cuotas a Cubrir</h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-green-700">Número de cuotas:</span>
-                      <input
-                        type="number"
-                        min="1"
-                        max={cuotasDisponibles.length}
-                        value={cuotasACubrir}
-                        onChange={(e) => setCuotasACubrir(parseInt(e.target.value) || 1)}
-                        className="w-20 px-2 py-1 border border-green-300 rounded text-center"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-green-700">Total a cubrir:</span>
-                      <span className="font-bold text-lg">{formatMoney(calcularTotalCuotas())}</span>
-                    </div>
-                    {parseFloat(formData.monto) < calcularTotalCuotas() && (
-                      <p className="text-sm text-orange-600">
-                        ⚠️ El monto es insuficiente para cubrir {cuotasACubrir} cuota(s)
-                      </p>
+                {/* 2. SELECCIÓN DE PRÉSTAMO */}
+                <div className="space-y-2">
+                    <Label className="flex items-center gap-2"><FileText size={16}/> Préstamo Activo</Label>
+                    <Select onValueChange={setSelectedLoanId} value={selectedLoanId} disabled={!selectedClienteId || loadingLoans}>
+                        <SelectTrigger>
+                            <SelectValue placeholder={loadingLoans ? "Cargando..." : "Seleccione préstamo..."} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {prestamos.map(p => (
+                                <SelectItem key={p.id} value={p.id}>
+                                    RD$ {parseFloat(p.monto_principal).toLocaleString()} - Saldo: {parseFloat(p.saldo_capital).toLocaleString()}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    {selectedClienteId && prestamos.length === 0 && !loadingLoans && (
+                        <p className="text-xs text-amber-600">Este cliente no tiene préstamos activos.</p>
                     )}
-                  </div>
                 </div>
-              )}
 
-              {formData.tipoPago === 'aporte_capital' && formData.monto && creditoSeleccionado && (
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-purple-900 mb-3">
-                    <i className="fa-solid fa-calculator mr-2"></i>
-                    Impacto del Aporte a Capital
-                  </h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-purple-700">Monto del aporte:</span>
-                      <span className="font-bold text-lg">{formatMoney(parseFloat(formData.monto || '0'))}</span>
+                {/* 3. MONTO A PAGAR */}
+                <div className="space-y-2">
+                    <Label>Monto a Pagar (RD$)</Label>
+                    <div className="relative">
+                        <DollarSign className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                        <Input 
+                            type="number" 
+                            className="pl-10 text-lg font-bold text-green-700" 
+                            placeholder="0.00" 
+                            value={monto}
+                            onChange={(e) => setMonto(e.target.value)}
+                            disabled={!selectedLoanId}
+                        />
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-purple-700">Saldo actual:</span>
-                      <span className="font-semibold">
-                        {formatMoney(creditoSeleccionado.monto - creditoSeleccionado.montoPagado)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-purple-700">Nuevo saldo:</span>
-                      <span className="font-semibold text-green-600">
-                        {formatMoney(Math.max(0, creditoSeleccionado.monto - creditoSeleccionado.montoPagado - parseFloat(formData.monto || '0')))}
-                      </span>
-                    </div>
-                    <div className="mt-3 pt-3 border-t border-purple-200">
-                      <p className="text-purple-700 text-xs">
-                        <i className="fa-solid fa-info-circle mr-1"></i>
-                        Las cuotas pendientes se recalcularán automáticamente con el nuevo saldo.
-                      </p>
-                    </div>
-                  </div>
+                    {selectedLoan && (
+                        <p className="text-xs text-gray-500 text-right cursor-pointer hover:text-blue-600" 
+                           onClick={() => setMonto(sugerenciaPago.toString())}>
+                            Sugerido: RD$ {parseFloat(sugerenciaPago).toLocaleString()}
+                        </p>
+                    )}
                 </div>
-              )}
 
-              <div className="flex justify-end space-x-4">
-                <button
-                  type="button"
-                  onClick={() => router.push('/dashboard?tab=pagos')}
-                  className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading || !formData.creditoId}
-                  className="px-6 py-2 text-white rounded-lg font-medium transition-all shadow-sm hover:shadow-md hover:scale-105 disabled:opacity-50"
-                  style={{ backgroundColor: user?.empresaActiva?.color || '#2563eb' }}
-                >
-                  {loading ? 'Registrando...' : 'Registrar Pago'}
-                </button>
-              </div>
+                <Button type="submit" className="w-full bg-green-600 hover:bg-green-700 h-12 text-lg" 
+                        disabled={submitting || !selectedLoanId || !monto}>
+                    {submitting ? <Loader2 className="animate-spin" /> : 'Confirmar Pago'}
+                </Button>
             </form>
-          </div>
+          </CardContent>
+        </Card>
+
+        {/* COLUMNA DERECHA: DETALLES DEL PRÉSTAMO */}
+        <div className="md:col-span-1">
+            {selectedLoan ? (
+                <Card className="bg-slate-50 border-slate-200 shadow-inner h-full">
+                    <CardHeader>
+                        <CardTitle className="text-slate-700">Detalles del Préstamo</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <p className="text-xs text-slate-500 uppercase">Capital Original</p>
+                                <p className="font-semibold text-lg">RD$ {parseFloat(selectedLoan.monto_principal).toLocaleString()}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-slate-500 uppercase">Fecha Inicio</p>
+                                <p className="font-semibold text-lg">{new Date(selectedLoan.createdAt).toLocaleDateString()}</p>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-white rounded-lg border border-slate-200">
+                            <p className="text-xs text-slate-500 uppercase mb-1">Saldo Pendiente Actual</p>
+                            <p className="text-3xl font-black text-red-500">
+                                RD$ {(parseFloat(selectedLoan.saldo_capital) + parseFloat(selectedLoan.saldo_interes)).toLocaleString()}
+                            </p>
+                            <div className="flex justify-between text-xs text-slate-400 mt-2">
+                                <span>Cap: {parseFloat(selectedLoan.saldo_capital).toLocaleString()}</span>
+                                <span>Int: {parseFloat(selectedLoan.saldo_interes).toLocaleString()}</span>
+                            </div>
+                        </div>
+
+                        {selectedLoan.amortizationSchedule?.[0] && (
+                            <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                                <p className="text-xs text-blue-600 uppercase font-bold mb-1">Próxima Cuota (#{selectedLoan.amortizationSchedule[0].numero_cuota})</p>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-lg font-bold text-blue-900">
+                                        RD$ {parseFloat(selectedLoan.amortizationSchedule[0].monto_cuota).toLocaleString()}
+                                    </span>
+                                    <span className="text-xs bg-white px-2 py-1 rounded text-blue-500 border border-blue-200">
+                                        Vence: {new Date(selectedLoan.amortizationSchedule[0].fecha_vencimiento).toLocaleDateString()}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            ) : (
+                <div className="h-full flex items-center justify-center border-2 border-dashed border-gray-200 rounded-lg bg-gray-50 text-gray-400 p-10 text-center">
+                    <p>Seleccione un préstamo para ver sus detalles</p>
+                </div>
+            )}
         </div>
-      </main>
-    </>
+      </div>
+    </div>
   );
 }

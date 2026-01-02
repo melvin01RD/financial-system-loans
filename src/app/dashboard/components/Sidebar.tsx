@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 
 interface SidebarProps {
   activeTab: string;
@@ -12,7 +13,7 @@ interface SidebarProps {
   creditos: any[];
 }
 
-// Función auxiliar para ajustar colores (puedes moverla a @/lib/utils si prefieres)
+// Función auxiliar para ajustar colores
 function adjustColor(color: string, amount: number): string {
   const clamp = (num: number) => Math.min(Math.max(num, 0), 255);
   const hex = color.replace('#', '');
@@ -24,13 +25,13 @@ function adjustColor(color: string, amount: number): string {
 }
 
 export default function Sidebar({ activeTab, setActiveTab, user, clientes, creditos }: SidebarProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(false); // Por defecto cerrado en móvil
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
 
   const primaryColor = user?.empresaActiva?.color || '#2563eb';
 
-  // Lógica de Logout integrada
   const handleLogout = async () => {
     if (!confirm('¿Estás seguro de que deseas cerrar sesión?')) return;
     
@@ -50,31 +51,23 @@ export default function Sidebar({ activeTab, setActiveTab, user, clientes, credi
   };
 
   const menuItems = [
-    { id: 'overview', name: 'Panel Principal', icon: 'fa-solid fa-chart-line', description: 'Vista general' },
-    { id: 'clientes', name: 'Clientes', icon: 'fa-solid fa-users', badge: clientes.length, description: 'Gestionar clientes' },
-    { id: 'prestamos', name: 'Préstamos', icon: 'fa-solid fa-calculator', description: 'Crear y ver préstamos' },
-    { id: 'evaluacion', name: 'Evaluación', icon: 'fa-solid fa-magnifying-glass-chart', description: 'Análisis de riesgo' },
-    { id: 'creditos', name: 'Créditos', icon: 'fa-solid fa-money-bill-wave', badge: creditos.length, description: 'Gestionar créditos' },
-    { id: 'pagos', name: 'Pagos', icon: 'fa-solid fa-hand-holding-dollar', description: 'Registrar pagos' },
-    { id: 'cuotas', name: 'Cuotas', icon: 'fa-solid fa-list-check', description: 'Ver todas las cuotas' },
-    { id: 'empresas', name: 'Empresas', icon: 'fa-solid fa-building', description: 'Gestionar empresas' },
-    { id: 'usuarios', name: 'Usuarios', icon: 'fa-solid fa-user', description: 'Gestionar usuarios' },
-    { id: 'configuracion-creditos', name: 'Conf. Créditos', icon: 'fa-solid fa-gear', description: 'Configurar créditos' }
+    { id: 'overview', name: 'Panel Principal', icon: 'fa-solid fa-chart-line', description: 'Vista general', href: '/dashboard' },
+    { id: 'clientes', name: 'Clientes', icon: 'fa-solid fa-users', badge: clientes.length, description: 'Gestionar clientes', href: '/dashboard/clientes' },
+    { id: 'creditos', name: 'Créditos', icon: 'fa-solid fa-money-bill-wave', badge: creditos.length, description: 'Gestionar créditos', href: '/dashboard/creditos' },
+    { id: 'pagos', name: 'Registrar Cobro', icon: 'fa-solid fa-hand-holding-dollar', description: 'Registrar pagos', href: '/dashboard/pagos/nuevo' },
+    { id: 'usuarios', name: 'Usuarios', icon: 'fa-solid fa-user', description: 'Gestionar usuarios', href: '/dashboard/usuarios/nuevo' },
+    { id: 'evaluacion', name: 'Evaluación', icon: 'fa-solid fa-magnifying-glass-chart', description: 'Análisis de riesgo', href: '/dashboard/evaluacion/nueva' },
+    { id: 'empresas', name: 'Empresa', icon: 'fa-solid fa-building', description: 'Perfil de negocio', href: '/dashboard/empresa' },
+    { id: 'configuracion-creditos', name: 'Conf. Créditos', icon: 'fa-solid fa-gear', description: 'Configurar créditos', href: '/dashboard/configuracion' }
   ];
 
-  const handleNavigation = (itemId: string) => {
-    setActiveTab(itemId);
-    setSidebarOpen(false); // Cerrar en móvil tras click
-
-    const routes: Record<string, string> = {
-      'prestamos': '/dashboard/prestamos/crear',
-      'clientes': '/dashboard/clientes/nuevo',
-      'evaluacion': '/dashboard/evaluacion/nueva',
-    };
-
-    const targetRoute = routes[itemId] || `/dashboard?tab=${itemId}`;
-    router.push(targetRoute);
-  };
+  // Effect to sync activeTab with pathname if needed, though using pathname directly for class is better
+  useEffect(() => {
+    const activeItem = menuItems.find(item => pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href)));
+    if (activeItem && activeItem.id !== activeTab) {
+      setActiveTab(activeItem.id);
+    }
+  }, [pathname, setActiveTab]);
 
   return (
     <>
@@ -119,31 +112,39 @@ export default function Sidebar({ activeTab, setActiveTab, user, clientes, credi
 
         {/* Navigation Section */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto scrollbar-hide">
-          {menuItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => handleNavigation(item.id)}
-              className={`group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200
-                ${activeTab === item.id 
-                  ? 'bg-white text-slate-900 shadow-lg scale-[1.02]' 
-                  : 'text-white/80 hover:bg-white/10 hover:text-white'}`}
-            >
-              <i className={`${item.icon} text-lg mr-3 w-6`}></i>
-              <div className="flex-1 text-left">
-                <div className="flex items-center justify-between">
-                  <span>{item.name}</span>
-                  {item.badge ? (
-                    <span className="ml-2 px-2 py-0.5 text-[10px] font-bold rounded-full bg-white/20">
-                      {item.badge}
-                    </span>
-                  ) : null}
+          {menuItems.map((item) => {
+            const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
+            
+            return (
+              <Link
+                key={item.id}
+                href={item.href}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  setSidebarOpen(false);
+                }}
+                className={`group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200
+                  ${isActive 
+                    ? 'bg-white text-slate-900 shadow-lg scale-[1.02]' 
+                    : 'text-white/80 hover:bg-white/10 hover:text-white'}`}
+              >
+                <i className={`${item.icon} text-lg mr-3 w-6`}></i>
+                <div className="flex-1 text-left">
+                  <div className="flex items-center justify-between">
+                    <span>{item.name}</span>
+                    {item.badge ? (
+                      <span className="ml-2 px-2 py-0.5 text-[10px] font-bold rounded-full bg-white/20">
+                        {item.badge}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className={`text-[10px] ${isActive ? 'text-slate-500' : 'text-white/50'}`}>
+                    {item.description}
+                  </p>
                 </div>
-                <p className={`text-[10px] ${activeTab === item.id ? 'text-slate-500' : 'text-white/50'}`}>
-                  {item.description}
-                </p>
-              </div>
-            </button>
-          ))}
+              </Link>
+            );
+          })}
         </nav>
 
         {/* User Info & Logout */}

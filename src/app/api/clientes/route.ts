@@ -2,86 +2,47 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
-// 1. Esquema de validación estricto
+// 1. Esquema de validación AJUSTADO (Más flexible)
 const clienteSchema = z.object({
-  nombre: z.string().trim().min(3, "Mínimo 3 caracteres"),
-  apellido: z.string().trim().min(3, "Mínimo 3 caracteres"),
+  nombre: z.string().trim().min(2, "Nombre muy corto"),
+  apellido: z.string().trim().optional().or(z.string().min(2)),
   email: z.string().email("Email inválido"),
-  telefono: z.string().length(10, "10 dígitos"),
-  cedula: z.string().length(11, "11 dígitos"),
+  // Quitamos .length() estricto para que acepte guiones y los limpie luego
+  telefono: z.string().min(10, "Mínimo 10 dígitos"),
+  cedula: z.string().min(11, "Mínimo 11 dígitos"), 
   direccion: z.string().optional(),
-  password: z.string().min(6, "Password muy corto"),
-  fecha_nacimiento: z.string(), // Recibimos el string del input date
+  password: z.string().min(6, "Password mínimo 6 caracteres").default("cliente123"),
+  fecha_nacimiento: z.string(),
 });
-
-
-export async function GET() {
-  try {
-    const clientes = await prisma.client.findMany({
-      orderBy: { nombre: 'asc' }, 
-      select: {
-        id: true,
-        nombre: true,
-        apellido: true,
-        cedula: true
-      }
-    })
-    console.log(clientes)
-    return NextResponse.json(clientes);
-  } catch (error) {
-    return NextResponse.json({ error: "Error al obtener clientes" }, { status: 500 });
-  }
-}
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    
-    // Validamos los datos con Zod
-    const data = clienteSchema.parse(body);
+    console.log("📥 DATOS RECIBIDOS DEL FRONTEND:", body);
 
-    // Creamos el cliente en la base de datos (Neon)
+    // Intentamos validar pero capturamos el error específico de cada campo
+    const result = clienteSchema.safeParse(body);
+    
+    if (!result.success) {
+      console.log("❌ ERROR DE VALIDACIÓN ZOD:", result.error.format());
+      return NextResponse.json({ 
+        error: "Datos inválidos", 
+        detalles: result.error.format() 
+      }, { status: 400 });
+    }
+
+    // Si pasa, intentamos guardar
     const cliente = await prisma.client.create({
       data: {
-        nombre: data.nombre,
-        apellido: data.apellido,
-        email: data.email,
-        telefono: data.telefono,
-        cedula: data.cedula,
-        direccion: data.direccion || '',
-        password: data.password, 
-        fecha_nacimiento: new Date(data.fecha_nacimiento), // Conversión necesaria para PostgreSQL
+        ...result.data,
+        fecha_nacimiento: new Date(result.data.fecha_nacimiento),
       },
     });
 
     return NextResponse.json(cliente, { status: 201 });
 
   } catch (error: any) {
-    console.error('Error al crear cliente:', error);
-
-    // A. Errores de validación de Zod
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ 
-        error: 'Error de validación', 
-        detalles: error.issues.map(i => ({ 
-          campo: i.path.join('.'), 
-          mensaje: i.message 
-        })) 
-      }, { status: 400 });
-    }
-
-    // B. Errores de duplicidad de Prisma (Cédula o Email)
-    if (error.code === 'P2002') {
-      return NextResponse.json(
-        { error: 'La cédula o el correo ya están registrados.' },
-        { status: 400 }
-      );
-    }
-
-    // C. Otros errores internos
-    return NextResponse.json(
-      { error: 'Error interno del servidor al procesar el registro' }, 
-      { status: 500 }
-    );
+    console.error('🔥 ERROR CRÍTICO EN EL SERVIDOR:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

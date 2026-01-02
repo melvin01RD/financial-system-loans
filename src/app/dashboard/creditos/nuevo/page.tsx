@@ -1,243 +1,221 @@
 'use client';
-
-export const dynamic = 'force-dynamic';
-
-import { useState, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calculator, AlertCircle, Loader2, CheckCircle2, ArrowLeft } from "lucide-react";
+import { calculateAmortization, PaymentFrequency } from "@/lib/finance-utils";
 
 export default function NuevoCreditoPage() {
   const router = useRouter();
   const [clientes, setClientes] = useState<any[]>([]);
-  const [configuraciones, setConfiguraciones] = useState<any[]>([]);
-  const [formData, setFormData] = useState({
-    clienteId: '',
-    monto: '',
-    configuracionCreditoId: '',
-    plazoMeses: '',
-    fechaInicio: '',
-  });
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
 
+  const [formData, setFormData] = useState({
+    clientId: '',
+    monto: '',
+    tasa: '20', // Default flat rate
+    cuotas: '12',
+    frecuencia: 'MENSUAL' as PaymentFrequency,
+    garantia: ''
+  });
+
+  // Cargar clientes al iniciar
   useEffect(() => {
-    loadClientes();
-    loadConfiguraciones();
+    fetch('/api/clientes')
+      .then(res => res.json())
+      .then(data => setClientes(data))
+      .catch(err => console.error("Error cargando clientes", err));
   }, []);
 
-  const loadClientes = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/clientes', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+  // Cálculo en Tiempo Real (Fuente de Verdad: finance-utils)
+  const preview = useMemo(() => {
+    const monto = parseFloat(formData.monto);
+    const tasa = parseFloat(formData.tasa);
+    const cuotas = parseInt(formData.cuotas);
 
-      if (res.ok) {
-        const data = await res.json();
-        setClientes(data);
-      }
-    } catch (error) {
-      console.error('Error al cargar clientes:', error);
-    }
-  };
+    if (!monto || !tasa || !cuotas) return null;
 
-  const loadConfiguraciones = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/configuracion-creditos', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setConfiguraciones(data);
-      }
-    } catch (error) {
-      console.error('Error al cargar configuraciones:', error);
-    }
-  };
+    return calculateAmortization(monto, tasa, cuotas, formData.frecuencia);
+  }, [formData.monto, formData.tasa, formData.cuotas, formData.frecuencia]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
     setLoading(true);
+    setError('');
+    setSuccess(false);
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/creditos', {
+      const res = await fetch('/api/prestamos', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          clienteId: formData.clienteId,
+          clientId: formData.clientId,
           monto: parseFloat(formData.monto),
-          configuracionCreditoId: formData.configuracionCreditoId,
-          plazoMeses: parseInt(formData.plazoMeses),
-          fechaInicio: formData.fechaInicio || undefined,
+          tasa: parseFloat(formData.tasa),
+          cuotas: parseInt(formData.cuotas),
+          frecuencia: formData.frecuencia,
+          garantia: formData.garantia
         }),
       });
 
-      if (!res.ok) {
+      if (res.ok) {
+        setSuccess(true);
+        // Limpieza automática
+        setFormData({ ...formData, monto: '', garantia: '' });
+        // Redirigir suavemente tras 4 segundos
+        setTimeout(() => router.push('/dashboard/creditos'), 4000);
+      } else {
         const data = await res.json();
-        throw new Error(data.error || 'Error al crear crédito');
+        setError(data.error || 'Error al crear el préstamo');
       }
-
-      router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError('Error de conexión');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <>
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Nuevo Crédito</h2>
-            <p className="text-sm text-gray-500 mt-1">Registra un nuevo crédito en el sistema</p>
-          </div>
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            <span>←</span>
-            <span>Volver</span>
-          </button>
+    <div className="max-w-5xl mx-auto p-6">
+      <Button variant="ghost" onClick={() => router.push('/dashboard/creditos')} className="mb-4">
+        <ArrowLeft className="mr-2 h-4 w-4" /> Volver
+      </Button>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* COLUMNA 1: FORMULARIO */}
+        <div className="lg:col-span-2">
+            <Card className="shadow-lg border-t-4 border-blue-600">
+                <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-xl">
+                    <Calculator className="text-blue-600" /> Crear Nuevo Préstamo
+                </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    
+                    {success && (
+                        <div className="p-4 bg-green-50 text-green-700 rounded-lg flex items-center gap-3 animate-pulse">
+                            <CheckCircle2 size={24} />
+                            <div>
+                                <p className="font-bold">¡Préstamo Creado!</p>
+                                <p className="text-sm">Redirigiendo al listado...</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {error && (
+                        <div className="p-3 bg-red-100 text-red-700 rounded flex items-center gap-2">
+                            <AlertCircle size={18}/>{error}
+                        </div>
+                    )}
+                    
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Cliente</Label>
+                            <Select onValueChange={(v) => setFormData({...formData, clientId: v})}>
+                            <SelectTrigger><SelectValue placeholder="Seleccione un cliente..." /></SelectTrigger>
+                            <SelectContent className="max-h-[200px]">
+                                {clientes.map(c => (
+                                    <SelectItem key={c.id} value={c.id}>{c.nombre} {c.apellido}</SelectItem>
+                                ))}
+                            </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Monto (RD$)</Label>
+                                <Input type="number" required value={formData.monto} onChange={(e) => setFormData({...formData, monto: e.target.value})} placeholder="Ej. 10000" />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Tasa Interés Total (%)</Label>
+                                <Input type="number" value={formData.tasa} onChange={(e) => setFormData({...formData, tasa: e.target.value})} />
+                                <p className="text-[10px] text-gray-400">Tasa simple aplicada al total</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Cuotas</Label>
+                                <Input type="number" value={formData.cuotas} onChange={(e) => setFormData({...formData, cuotas: e.target.value})} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Frecuencia</Label>
+                                <Select value={formData.frecuencia} onValueChange={(v: any) => setFormData({...formData, frecuencia: v})}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="SEMANAL">Semanal</SelectItem>
+                                        <SelectItem value="QUINCENAL">Quincenal</SelectItem>
+                                        <SelectItem value="MENSUAL">Mensual</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Garantía / Observaciones</Label>
+                            <Input value={formData.garantia} onChange={(e) => setFormData({...formData, garantia: e.target.value})} placeholder="Detalle de garantía..." />
+                        </div>
+                    </div>
+
+                    <Button type="submit" className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-lg font-bold" disabled={loading || !formData.clientId}>
+                    {loading ? <Loader2 className="animate-spin" /> : 'Confirmar y Desembolsar'}
+                    </Button>
+                </form>
+                </CardContent>
+            </Card>
         </div>
-      </header>
 
-      {/* Content */}
-      <main className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-3xl mx-auto">
-          <div className="bg-white shadow-sm rounded-xl p-8 border border-gray-200">
-            {error && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                {error}
-              </div>
-            )}
+        {/* COLUMNA 2: PREVISUALIZACIÓN */}
+        <div className="lg:col-span-1">
+            <Card className="bg-slate-900 text-white h-full sticky top-6 shadow-xl border-slate-700">
+                <CardHeader>
+                    <CardTitle className="text-slate-300 text-sm uppercase tracking-wider">Resumen de Cálculo</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    {preview ? (
+                        <>
+                            <div>
+                                <p className="text-slate-400 text-xs text-right">CUOTA {formData.frecuencia}</p>
+                                <p className="text-4xl font-black text-green-400 text-right">
+                                    RD$ {preview.quotaAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </p>
+                            </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Cliente *
-                </label>
-                <select
-                  required
-                  value={formData.clienteId}
-                  onChange={(e) => setFormData({ ...formData, clienteId: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Seleccione un cliente</option>
-                  {clientes.map((cliente) => (
-                    <option key={cliente.id} value={cliente.id}>
-                      {cliente.nombre} {cliente.apellido} - {cliente.cedula}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                            <div className="space-y-2 pt-4 border-t border-slate-700">
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-slate-400">Capital:</span>
+                                    <span>RD$ {parseFloat(formData.monto || '0').toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-slate-400">Interés Total:</span>
+                                    <span className="text-yellow-400 font-bold">+ RD$ {preview.totalInterest.toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between text-lg font-bold pt-2 border-t border-slate-800">
+                                    <span>Total a Pagar:</span>
+                                    <span>RD$ {preview.totalPayable.toLocaleString()}</span>
+                                </div>
+                            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Configuración de Crédito *
-                </label>
-                <select
-                  required
-                  value={formData.configuracionCreditoId}
-                  onChange={(e) => setFormData({ ...formData, configuracionCreditoId: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Seleccione una configuración</option>
-                  {configuraciones.map((config) => (
-                    <option key={config.id} value={config.id}>
-                      {config.nombre} - {config.interesAnual}% anual ({config.tipoCalculo})
-                    </option>
-                  ))}
-                </select>
-                <p className="text-sm text-gray-500 mt-1">
-                  La tasa de interés y tipo de cálculo se tomarán de la configuración seleccionada
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Monto ($) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={formData.monto}
-                    onChange={(e) => setFormData({ ...formData, monto: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="10000"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Plazo (meses) *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    value={formData.plazoMeses}
-                    onChange={(e) => setFormData({ ...formData, plazoMeses: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="12"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Fecha de Inicio
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.fechaInicio}
-                    onChange={(e) => setFormData({ ...formData, fechaInicio: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <p className="text-sm text-gray-500 mt-1">
-                    Dejar vacío para usar hoy
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-800">
-                  <strong>Nota:</strong> Las cuotas se calcularán automáticamente según la configuración seleccionada usando el sistema de amortización correspondiente (Francés, Alemán o Americano).
-                </p>
-              </div>
-
-              <div className="flex justify-end space-x-4">
-                <button
-                  type="button"
-                  onClick={() => router.push('/dashboard')}
-                  className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {loading ? 'Guardando...' : 'Crear Crédito'}
-                </button>
-              </div>
-            </form>
-          </div>
+                            <div className="bg-slate-800 p-3 rounded text-xs text-slate-400 mt-4">
+                                <p>ℹ️ Cálculo basado en <strong>Interés Simple (Flat)</strong>. El interés se calcula sobre el monto inicial y se divide equitativamente.</p>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="text-center py-10 text-slate-500">
+                            Ingrese montos para calcular...
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
         </div>
-      </main>
-    </>
+      </div>
+    </div>
   );
 }

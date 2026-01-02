@@ -28,18 +28,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.refresh();
   };
 
+  // ... (mismo código de imports y funciones)
+
   return (
-    <div className="flex h-screen bg-gray-100 overflow-hidden">
+    <div className="flex h-screen bg-[#f8fafc] overflow-hidden"> {/* Fondo Slate muy claro, estilo bancario */}
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         user={user} 
-        onLogout={onLogout} // <--- Ahora sí le pasamos la función real
+        onLogout={onLogout} 
         clientes={[]} 
         creditos={[]} 
       />
-      <main className="flex-1 overflow-y-auto bg-white p-6">
-        {children}
+      
+      {/* QUITAMOS bg-white y ponemos bg-transparent para que use el del padre */}
+      <main className="flex-1 overflow-y-auto p-4 md:p-8 transition-all duration-300">
+        <div className="max-w-7xl mx-auto"> {/* Contenedor para que el contenido no se pegue a los bordes en pantallas grandes */}
+          {children}
+        </div>
       </main>
     </div>
   );
