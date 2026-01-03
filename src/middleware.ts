@@ -57,5 +57,8 @@ export async function middleware(request: NextRequest) {
 
 // 🎯 CONFIGURACIÓN DE RUTAS A VIGILAR
 export const config = {
-  matcher: ['/', '/dashboard/:path*', '/login'],
+  matcher: ['/', '/dashboard/:path*', '/login',
+ '/((?!api|_next/static|_next/image|favicon.ico).*)'
+], 
+
 };
