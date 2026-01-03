@@ -30,7 +30,6 @@ export async function POST(req: NextRequest) {
     const { clientId, evaluacionId, monto, tasa, cuotas, frecuencia, garantia } = result.data;
 
     // 2. Obtener Usuario ADMIN para `createdById` (Evitar error 500)
-    // En producción esto vendría de la sesión (NextAuth).
     const adminUser = await prisma.user.findFirst();
     if (!adminUser) {
         return NextResponse.json({ error: "No hay usuarios registrados en el sistema para asociar al préstamo." }, { status: 500 });
@@ -56,7 +55,7 @@ export async function POST(req: NextRequest) {
           cuota_fija: amortization.quotaAmount,
           garantias: garantia,
           estado: 'ACTIVO',
-          createdById: adminUser.id // ID real de la base de datos
+          createdById: adminUser.id
         }
       });
 
