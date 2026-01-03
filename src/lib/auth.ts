@@ -1,4 +1,6 @@
 import bcrypt from 'bcryptjs';
+import { cookies } from 'next/headers';
+import { verifyToken } from './jwt';
 
 /**
  * Compara una contraseña en texto plano con una encriptada (hash)
@@ -25,4 +27,25 @@ export async function comparePassword(password: string, hash: string): Promise<b
  */
 export async function hashPassword(password: string): Promise<string> {
   return await bcrypt.hash(password, 10);
+}
+
+/**
+ * Obtiene el usuario actual desde la cookie 'token'
+ * Usar esto en Server Actions y Server Components
+ */
+export async function getUser() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('token')?.value;
+
+  if (!token) return null;
+
+  try {
+    const payload = await verifyToken(token);
+    if (!payload) return null;
+    
+    // Devolvemos el payload normalizado. Ajustar según lo que guardes en el JWT.
+    return payload as { id: string; email: string; name?: string; role?: string };
+  } catch (error) {
+    return null;
+  }
 }

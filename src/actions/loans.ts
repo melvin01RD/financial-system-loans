@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { LoanStatus, PaymentFrequency } from "@prisma/client"
-import { auth } from "@/auth"
+import { getUser } from "@/lib/auth"
 
 // 1. MOTOR DE CÁLCULO
 function calcularAmortizacion(
@@ -81,11 +81,11 @@ export async function createLoan(formData: FormData) {
 
     try {
         // --- OBTENER USUARIO AUTENTICADO ---
-        const session = await auth()
-        if (!session?.user?.id) {
+        const user = await getUser()
+        if (!user?.id) {
             return { success: false, message: "Usuario no autenticado." }
         }
-        const userId = session.user.id
+        const userId = user.id
 
         // Calcular tabla de amortización
         const resultado = calcularAmortizacion(
@@ -150,8 +150,8 @@ export async function updateLoan(loanId: string, formData: FormData) {
     }
 
     try {
-        const session = await auth()
-        if (!session?.user?.id) {
+        const user = await getUser()
+        if (!user?.id) {
             return { success: false, message: "No autorizado" }
         }
 
@@ -167,7 +167,7 @@ export async function updateLoan(loanId: string, formData: FormData) {
                 plazo_cantidad: plazo,
                 fecha_desembolso: fechaInicio,
                 estado: estado,
-                updatedById: session.user.id
+                updatedById: user.id
             }
         })
 
