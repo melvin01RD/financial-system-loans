@@ -7,35 +7,47 @@ const SECRET = new TextEncoder().encode(
 );
 
 export async function middleware(request: NextRequest) {
-  // 1. Intentamos agarrar el token de las cookies
   const token = request.cookies.get('token')?.value;
   const { pathname } = request.nextUrl;
 
-  // 2. Si el usuario intenta ir al DASHBOARD
+  // 🚀 1. GESTIÓN DE LA RAÍZ (/)
+  // Si alguien entra a la URL principal, decidimos según su sesión
+  if (pathname === '/') {
+    if (token) {
+      try {
+        await jwtVerify(token, SECRET);
+        return NextResponse.redirect(new URL('/dashboard', request.url));
+      } catch (e) {
+        return NextResponse.redirect(new URL('/login', request.url));
+      }
+    }
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  // 🛡️ 2. PROTECCIÓN DEL DASHBOARD
   if (pathname.startsWith('/dashboard')) {
     if (!token) {
-      console.log("🚫 Sin token, rebotando al login");
       return NextResponse.redirect(new URL('/login', request.url));
     }
 
     try {
-      // Verificamos si el token es real y no ha expirado
       await jwtVerify(token, SECRET);
       return NextResponse.next();
     } catch (error) {
-      console.log("🚫 Token inválido o expirado, rebotando...");
       const response = NextResponse.redirect(new URL('/login', request.url));
-      response.cookies.delete('token'); // Limpiamos la basura
+      response.cookies.delete('token');
       return response;
     }
   }
 
-  // 3. Si el usuario ya está logueado e intenta ir al LOGIN, lo mandamos al dashboard
+  // 🔑 3. PREVENCIÓN DE LOGIN DUPLICADO
+  // Si ya tiene sesión activa e intenta ir a login, lo mandamos al dashboard
   if (pathname === '/login' && token) {
     try {
       await jwtVerify(token, SECRET);
       return NextResponse.redirect(new URL('/dashboard', request.url));
     } catch (e) {
+      // Si el token es basura, dejamos que vea el login
       return NextResponse.next();
     }
   }
@@ -43,7 +55,7 @@ export async function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Rutas que el Middleware va a vigilar
+// 🎯 CONFIGURACIÓN DE RUTAS A VIGILAR
 export const config = {
-  matcher: ['/dashboard/:path*', '/login'],
+  matcher: ['/', '/dashboard/:path*', '/login'],
 };
