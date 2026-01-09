@@ -51,6 +51,8 @@ model User {
   nombre   String
   apellido String
   role     UserRole @default(OFFICER)
+  active   Boolean @default(true)
+
 
   createdLoans    Loan[]    @relation("CreatedLoans")
   updatedLoans    Loan[]    @relation("UpdatedLoans")
@@ -58,6 +60,8 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  @@index([role])
+  @@index([active])
 }
 
 model Client {
